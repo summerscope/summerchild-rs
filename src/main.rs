@@ -297,8 +297,10 @@ fn parse_range(range_str: &str) -> Option<ScoreRange> {
 }
 
 fn print_summary(state: &State, results_section: &QuizResults) {
+	let final_score = state.multiplier * state.score;
+
 	println!("---------- Results ----------");
-	println!("Your score {}/99", state.score);
+	println!("Your score {}/99", final_score);
 
 	for res in results_section.results.values() {
 		if state.score >= res.range.low && state.score <= res.range.high {
