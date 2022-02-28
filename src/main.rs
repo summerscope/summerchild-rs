@@ -62,6 +62,8 @@ enum QuizItem {
 	Results(QuizResults)
 }
 
+type QuizData = Vec<QuizItem>;
+
 #[derive(Debug)]
 struct State {
 	multiplier: Score,
@@ -189,11 +191,11 @@ impl<'de> Deserialize<'de> for ScoreOrEmpty {
 	}
 }
 
-fn read_quiz_json<P: AsRef<Path>>(path: P) -> Result<Vec<QuizItem>, QuizError> {
+fn read_quiz_json<P: AsRef<Path>>(path: P) -> Result<QuizData, QuizError> {
 	let file = File::open(path)?;
 	let reader = BufReader::new(file);
 
-	let quiz: Vec<QuizItem> = serde_json::from_reader(reader)?;
+	let quiz: QuizData = serde_json::from_reader(reader)?;
 
 	Ok(quiz)
 }
@@ -335,8 +337,6 @@ fn run_quiz() -> Result<(), QuizError> {
 
 	let (questions, results_section) = load_quiz_data()?;
 	let questions_by_id = hash_question_ids(&questions);
-
-	print!("{:#?}", results_section);
 
 	while !state.finished {
 		let question = questions_by_id[&state.currentq];
