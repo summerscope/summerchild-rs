@@ -141,9 +141,7 @@ impl<'de> Visitor<'de> for ScoreRangeVisitor {
 
 	fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E>
 	{
-		let r = parse_range(v);
-
-		match r {
+		match parse_range(v) {
 			Some(r) => Ok(r),
 			None    => Err(de::Error::custom("invalid score range"))
 		}
@@ -200,7 +198,7 @@ fn read_quiz_json<P: AsRef<Path>>(path: P) -> Result<QuizData, QuizError> {
 	Ok(quiz)
 }
 
-fn hash_question_ids(qs: &Vec<Question>) -> Map<&String, &Question> {
+fn index_question_ids(qs: &Vec<Question>) -> Map<&String, &Question> {
 	qs.iter().map(|q| (&q.id, q)).collect()
 }
 
@@ -243,7 +241,7 @@ fn try_ask_question(question: &Question) -> Result<(String, &Answer), AskError> 
 	}
 }
 
-fn ask_question(question: &Question) -> io::Result<(String, &Answer)> {
+fn ask_question(question: &Question) -> Result<(String, &Answer), QuizError> {
 	let mut answer;
 
 	loop {
@@ -251,7 +249,7 @@ fn ask_question(question: &Question) -> io::Result<(String, &Answer)> {
 
 		match answer {
 			Ok(answer)                      => return Ok(answer),
-			Err(AskError::IOError(err))     => return Err(err),
+			Err(AskError::IOError(err))     => return Err(QuizError::from(err)),
 			Err(AskError::InvalidAnswer(_)) => continue,
 		}
 	};
@@ -276,7 +274,7 @@ fn update_state(state: State, question: &Question, answer: &Answer, answer_key: 
 		..state
 	};
 
-	if let Some(rec) = answer.recommendation.as_ref() {
+	if let Some(rec) = &answer.recommendation {
 		if !rec.is_empty() {
 			next_state.recommendations.push(rec.clone());
 		}
@@ -338,7 +336,7 @@ fn run_quiz() -> Result<(), QuizError> {
 	// state = State { currentq: String::from("Q27"), ..state };
 
 	let (questions, results_section) = load_quiz_data()?;
-	let questions_by_id = hash_question_ids(&questions);
+	let questions_by_id = index_question_ids(&questions);
 
 	while !state.finished {
 		let question = questions_by_id[&state.currentq];
