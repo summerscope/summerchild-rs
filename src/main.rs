@@ -301,7 +301,7 @@ fn print_summary(state: &State, results_section: &QuizResults) {
 	println!("Your score {}/99", final_score);
 
 	for res in results_section.results.values() {
-		if state.score >= res.range.low && state.score <= res.range.high {
+		if res.range.low <= state.score && state.score <= res.range.high {
 			println!("{}: {}\n\n{}", res.range.text, res.title, res.text);
 		}
 	}
