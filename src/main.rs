@@ -295,7 +295,7 @@ fn parse_range(range_str: &str) -> Option<ScoreRange> {
 }
 
 fn print_summary(state: &State, results_section: &QuizResults) {
-	let final_score = state.multiplier * state.score;
+	let final_score = 99.0 - (state.multiplier * state.score);
 
 	println!("---------- Results ----------");
 	println!("Your score {}/99", final_score);
