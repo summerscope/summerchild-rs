@@ -12,7 +12,7 @@ use std::collections::BTreeMap as Map;
 
 type Score = f64;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum ScoreOrEmpty {
 	Value(Score),
 	Empty
@@ -109,8 +109,8 @@ enum QuizError {
 impl fmt::Display for QuizError {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			QuizError::JSONError(err) => write!(f, "{}", err),
-			QuizError::IOError(err)   => write!(f, "{}", err),
+			QuizError::JSONError(err) => write!(f, "json error: {}", err),
+			QuizError::IOError(err)   => write!(f, "io error: {}", err),
 			QuizError::ResultsSectionMissing => write!(f, "quiz results section not found")
 		}
 	}
@@ -189,6 +189,16 @@ impl<'de> Deserialize<'de> for ScoreOrEmpty {
 	}
 }
 
+fn score_or_else(o: Option<ScoreOrEmpty>, default: Score) -> Score {
+	use ScoreOrEmpty::*;
+
+	match o {
+		Some(Value(v)) => v,
+		Some(Empty)    => default,
+		None           => default
+	}
+}
+
 fn read_quiz_json<P: AsRef<Path>>(path: P) -> Result<QuizData, QuizError> {
 	let file = File::open(path)?;
 	let reader = BufReader::new(file);
@@ -200,6 +210,41 @@ fn read_quiz_json<P: AsRef<Path>>(path: P) -> Result<QuizData, QuizError> {
 
 fn index_question_ids(qs: &Vec<Question>) -> Map<&String, &Question> {
 	qs.iter().map(|q| (&q.id, q)).collect()
+}
+
+/// Maximum sum attainable for any series of answers, computed using dynamic programming
+fn max_sum_all_answers<'a>(f: fn(&Answer) -> u32, fuel: u32, cache: &mut Map<&'a String, u32>, questions: &Map<&String, &'a Question>, id: &String) -> u32
+{
+	if fuel <= 0 {
+		return 0;
+	} else if id.is_empty() {
+		return 0;
+	} else if let Some(&v) = cache.get(id) {
+		return v;
+	} else if let Some(&q) = questions.get(id) {
+		let v_max = q.answers.values()
+			.map(|a| max_sum_all_answers(f, fuel - 1, cache, questions, &a.nextq) + f(a))
+			.max().unwrap_or(0);
+		cache.insert(&q.id, v_max);
+		return v_max;
+	} else {
+		return 0;
+	}
+}
+
+/// Compute the maximum number of questions remaining for any series of answers.
+/// Returns the global maximum and map from every reachable question ID to the remaining count.
+fn max_questions_remaining<'a>(questions: &Map<&String, &'a Question>, id: &String) -> (u32, Map<&'a String, u32>) {
+	let mut cache = Map::new();
+	let v = max_sum_all_answers(|_answer| 1, 50, &mut cache, questions, id);
+	return (v, cache);
+}
+
+/// Maximum score attainable for any series of answers
+fn max_score(questions: &Map<&String, &Question>, id: &String) -> u32 {
+	let mut cache = Map::new();
+	let v = max_sum_all_answers(|answer| score_or_else(answer.score, 0.0) as u32, 50, &mut cache, questions, id);
+	return v;
 }
 
 fn input_line() -> io::Result<String> {
@@ -256,19 +301,9 @@ fn ask_question(question: &Question) -> Result<(String, &Answer), QuizError> {
 }
 
 fn update_state(state: State, question: &Question, answer: &Answer, answer_key: String) -> State {
-	fn get_score(o: &Option<ScoreOrEmpty>, default: Score) -> Score {
-		use ScoreOrEmpty::*;
-
-		match o {
-			Some(Value(v)) => *v,
-			Some(Empty)    =>  default,
-			None           =>  default
-		}
-	}
-
 	let mut next_state = State {
-		multiplier: get_score(&answer.multiplier, state.multiplier),
-		score: state.score + get_score(&answer.score, 0.0),
+		multiplier: score_or_else(answer.multiplier, state.multiplier),
+		score: state.score + score_or_else(answer.score, 0.0),
 		currentq: answer.nextq.clone(),
 		finished: answer.nextq.is_empty(),
 		..state
@@ -338,10 +373,19 @@ fn run_quiz() -> Result<(), QuizError> {
 	let (questions, results_section) = load_quiz_data()?;
 	let questions_by_id = index_question_ids(&questions);
 
+	let (max_questions, remain_map) = max_questions_remaining(&questions_by_id, &state.currentq);
+	let max_score = max_score(&questions_by_id, &state.currentq);
+
+	println!("Max Score: {}", max_score);
+
 	while !state.finished {
 		let question = questions_by_id[&state.currentq];
 		let (answer_key, answer) = ask_question(question)?;
 		state = update_state(state, question, answer, answer_key);
+
+		let remaining = remain_map[&state.currentq];
+		println!("Max Questions Remaining: {}", remaining);
+		println!("Progress: {}", 100.0 * (1.0 - (remaining as f64) / (max_questions as f64)));
 	}
 
 	print_summary(&state, &results_section);
