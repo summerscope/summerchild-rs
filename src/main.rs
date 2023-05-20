@@ -385,7 +385,7 @@ fn run_quiz() -> Result<(), QuizError> {
 
 		let remaining = remain_map[&state.currentq];
 		println!("Max Questions Remaining: {}", remaining);
-		println!("Progress: {}", 100.0 * (1.0 - (remaining as f64) / (max_questions as f64)));
+		println!("Progress: {:.0}%", 100.0 * (1.0 - (remaining as f64) / (max_questions as f64)));
 	}
 
 	print_summary(&state, &results_section);
